@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Strawberry Body -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M54,25 C45,25 35,32 32,45 C28,65 35,85 54,95 C73,85 80,65 76,45 C73,32 63,25 54,25 Z" />
+    <!-- Strawberry Seeds -->
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M54,40 L55,42 L54,44 L53,42 Z M45,55 L46,57 L45,59 L44,57 Z M63,55 L64,57 L63,59 L62,57 Z M54,70 L55,72 L54,74 L53,72 Z" />
+    <!-- Strawberry Leaves -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M54,25 L45,15 L54,20 L63,15 Z" />
+</vector>
