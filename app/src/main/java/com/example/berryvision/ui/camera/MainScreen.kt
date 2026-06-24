@@ -11,9 +11,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.ImageCaptureException
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.VideoCameraBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,10 +33,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.berryvision.data.CloudApiService
 import com.example.berryvision.ml.TFLiteDetector
 import com.example.berryvision.util.ConnectivityObserver
+import com.example.berryvision.util.scaleDown
+import com.example.berryvision.util.toOrientedBitmap
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
+import androidx.core.content.ContextCompat
+
+enum class AppMode {
+    RealTime, Photo
+}
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -38,13 +51,19 @@ fun MainScreen(
     detector: TFLiteDetector,
     cloudApiService: CloudApiService,
     connectivityObserver: ConnectivityObserver,
-    viewModel: DetectionViewModel
+    viewModel: DetectionViewModel,
+    initialMode: AppMode = AppMode.RealTime,
+    onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val detections by viewModel.detections.collectAsStateWithLifecycle()
     val connectivityStatus by viewModel.connectivityStatus.collectAsStateWithLifecycle()
+    val capturedBitmap by viewModel.capturedBitmap.collectAsStateWithLifecycle()
+    
+    var currentMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialMode) }
+    val imageCapture = remember { ImageCapture.Builder().build() }
 
     val analyzer = remember {
         StrawberryFrameAnalyzer(detector, cloudApiService, connectivityObserver) {
@@ -62,8 +81,10 @@ fun MainScreen(
                 val source = ImageDecoder.createSource(context.contentResolver, it)
                 ImageDecoder.decodeBitmap(source).copy(Bitmap.Config.ARGB_8888, true)
             }
+            val scaledBitmap = bitmap.scaleDown()
+            viewModel.updateCapturedBitmap(scaledBitmap)
             scope.launch {
-                analyzer.runInference(bitmap, connectivityStatus)
+                analyzer.runInference(scaledBitmap, connectivityStatus, useCloud = true)
             }
         }
     }
@@ -80,24 +101,61 @@ fun MainScreen(
             CenterAlignedTopAppBar(
                 title = { 
                     Text(
-                        "BerryVision", 
+                        if (capturedBitmap != null) "Análisis de Cosecha" else "BerryVision", 
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     ) 
                 },
-                actions = {
-                    IconButton(onClick = { photoPickerLauncher.launch("image/*") }) {
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Pick Photo",
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                    }
+                },
+                actions = {
+                    if (currentMode == AppMode.Photo && capturedBitmap == null) {
+                        IconButton(onClick = { photoPickerLauncher.launch("image/*") }) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = "Pick Photo",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
                 )
             )
+        },
+        bottomBar = {
+            if (capturedBitmap == null) {
+                NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.VideoCameraBack, contentDescription = null) },
+                    label = { Text("Tiempo Real") },
+                    selected = currentMode == AppMode.RealTime,
+                    onClick = { 
+                        currentMode = AppMode.RealTime 
+                        viewModel.updateCapturedBitmap(null)
+                        viewModel.updateDetections(emptyList())
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
+                    label = { Text("Fotografía") },
+                    selected = currentMode == AppMode.Photo,
+                    onClick = { 
+                        currentMode = AppMode.Photo 
+                        viewModel.updateCapturedBitmap(null)
+                        viewModel.updateDetections(emptyList())
+                    }
+                )
+                }
+            }
         }
     ) { innerPadding ->
         if (cameraPermissionState.status.isGranted) {
@@ -105,25 +163,72 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
             ) {
-                CameraPreview(
-                    modifier = Modifier.fillMaxSize(),
-                    detector = detector,
-                    cloudApiService = cloudApiService,
-                    connectivityObserver = connectivityObserver,
-                    viewModel = viewModel
-                )
-                
-                DetectionOverlay(
-                    detections = detections,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (capturedBitmap != null) {
+                    AnalysisResultScreen(
+                        bitmap = capturedBitmap!!,
+                        detections = detections,
+                        onNewCapture = {
+                            viewModel.updateCapturedBitmap(null)
+                            viewModel.updateDetections(emptyList())
+                        }
+                    )
+                } else {
+                    CameraPreview(
+                        modifier = Modifier.fillMaxSize(),
+                        detector = detector,
+                        cloudApiService = cloudApiService,
+                        connectivityObserver = connectivityObserver,
+                        viewModel = viewModel,
+                        imageCapture = imageCapture,
+                        isRealTime = currentMode == AppMode.RealTime
+                    )
+                    
+                    DetectionOverlay(
+                        detections = detections,
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-                StatusBadge(
-                    status = connectivityStatus,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                )
+                    if (currentMode == AppMode.Photo) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = 32.dp),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            FloatingActionButton(
+                                onClick = {
+                                    imageCapture.takePicture(
+                                        ContextCompat.getMainExecutor(context),
+                                        object : ImageCapture.OnImageCapturedCallback() {
+                                            override fun onCaptureSuccess(image: ImageProxy) {
+                                                val bitmap = image.toOrientedBitmap().scaleDown()
+                                                viewModel.updateCapturedBitmap(bitmap)
+                                                scope.launch {
+                                                    analyzer.runInference(bitmap, connectivityStatus)
+                                                }
+                                                image.close()
+                                            }
+
+                                            override fun onError(exception: ImageCaptureException) {
+                                                exception.printStackTrace()
+                                            }
+                                        }
+                                    )
+                                },
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Take Photo")
+                            }
+                        }
+                    }
+
+                    StatusBadge(
+                        status = connectivityStatus,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
+                    )
+                }
             }
         } else {
             PermissionRequestScreen(cameraPermissionState)

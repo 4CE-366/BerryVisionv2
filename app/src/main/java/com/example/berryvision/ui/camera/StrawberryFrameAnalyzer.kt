@@ -6,11 +6,11 @@ import androidx.camera.core.ImageProxy
 import com.example.berryvision.data.CloudApiService
 import com.example.berryvision.ml.TFLiteDetector
 import com.example.berryvision.util.ConnectivityObserver
-import com.example.berryvision.util.ImageUtils.toBitmap
+import com.example.berryvision.util.toOrientedBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -25,20 +25,34 @@ class StrawberryFrameAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val scope = CoroutineScope(Dispatchers.Default)
+    private var currentStatus = ConnectivityObserver.Status.Unavailable
 
-    override fun analyze(image: ImageProxy) {
+    init {
         scope.launch {
-            val status = connectivityObserver.observe().first()
-            val bitmap = image.toBitmap()
-            
-            runInference(bitmap, status)
-            
-            image.close()
+            connectivityObserver.observe().collect {
+                currentStatus = it
+            }
         }
     }
 
-    suspend fun runInference(bitmap: Bitmap, status: ConnectivityObserver.Status) {
-        if (status == ConnectivityObserver.Status.Available) {
+    override fun analyze(image: ImageProxy) {
+        val bitmap = try {
+            image.toOrientedBitmap()
+        } catch (e: Exception) {
+            image.close()
+            return
+        }
+
+        scope.launch {
+            // Real-Time video frames ALWAYS use the local TFLite model to prevent network lag
+            runInference(bitmap, currentStatus, useCloud = false)
+        }
+        
+        image.close()
+    }
+
+    suspend fun runInference(bitmap: Bitmap, status: ConnectivityObserver.Status, useCloud: Boolean = false) {
+        if (useCloud && status == ConnectivityObserver.Status.Available) {
             analyzeWithCloud(bitmap)
         } else {
             val detections = detector.detect(bitmap)
@@ -55,7 +69,7 @@ class StrawberryFrameAnalyzer(
             val byteArray = stream.toByteArray()
             
             val requestFile = byteArray.toRequestBody("image/jpeg".toMediaTypeOrNull())
-            val body = MultipartBody.Part.createFormData("image", "frame.jpg", requestFile)
+            val body = MultipartBody.Part.createFormData("file", "frame.jpg", requestFile)
             
             val response = cloudApiService.analyzeImage(body)
             if (response.isSuccessful) {

@@ -1,5 +1,6 @@
 package com.example.berryvision.data
 
+import com.google.gson.annotations.SerializedName
 import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Multipart
@@ -8,9 +9,9 @@ import retrofit2.http.Part
 
 interface CloudApiService {
     @Multipart
-    @POST("analyze")
+    @POST("detect")
     suspend fun analyzeImage(
-        @Part image: MultipartBody.Part
+        @Part file: MultipartBody.Part
     ): Response<AnalysisResponse>
 }
 
@@ -19,7 +20,7 @@ data class AnalysisResponse(
 )
 
 data class Detection(
-    val label: String,
+    @SerializedName("class") val label: String,
     val confidence: Float,
-    val box: List<Float> // Expected format: [x_min, y_min, x_max, y_max]
+    @SerializedName("bbox") val box: List<Float> // Expected format: [x_min, y_min, x_max, y_max]
 )

@@ -61,13 +61,26 @@ class TFLiteDetector(private val context: Context) {
     fun detect(bitmap: Bitmap): List<Detection> {
         val interp = interpreter ?: return emptyList()
 
-        // 1. Preprocesamiento: Redimensionar y Normalizar
-        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, modelInputSize, modelInputSize, true)
+        // 1. Preprocesamiento: Letterboxing para mantener la relación de aspecto
+        val scale = minOf(modelInputSize.toFloat() / bitmap.width, modelInputSize.toFloat() / bitmap.height)
+        val newWidth = (bitmap.width * scale).toInt()
+        val newHeight = (bitmap.height * scale).toInt()
+
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        val paddedBitmap = Bitmap.createBitmap(modelInputSize, modelInputSize, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(paddedBitmap)
+        // Color gris estándar para padding en YOLO
+        canvas.drawColor(android.graphics.Color.rgb(114, 114, 114))
+        
+        val padX = (modelInputSize - newWidth) / 2f
+        val padY = (modelInputSize - newHeight) / 2f
+        canvas.drawBitmap(resizedBitmap, padX, padY, null)
+
         val inputBuffer = ByteBuffer.allocateDirect(1 * modelInputSize * modelInputSize * 3 * 4)
         inputBuffer.order(ByteOrder.nativeOrder())
 
         val intValues = IntArray(modelInputSize * modelInputSize)
-        resizedBitmap.getPixels(intValues, 0, resizedBitmap.width, 0, 0, resizedBitmap.width, resizedBitmap.height)
+        paddedBitmap.getPixels(intValues, 0, paddedBitmap.width, 0, 0, paddedBitmap.width, paddedBitmap.height)
 
         for (pixelValue in intValues) {
             inputBuffer.putFloat(((pixelValue shr 16 and 0xFF) / 255f))
@@ -76,28 +89,33 @@ class TFLiteDetector(private val context: Context) {
         }
 
         // 2. Preparar el arreglo de salida [1, 7, 8400] para tus 3 clases
-        // 4 coordenadas + 3 clases de madurez = 7
         val outputArray = Array(1) { Array(7) { FloatArray(8400) } }
 
-        // 3. Ejecutar Inferencia directamente sobre el arreglo (evita crasheos por bytes)
+        // 3. Ejecutar Inferencia
         interp.run(inputBuffer, outputArray)
 
         // 4. Postprocesamiento
-        return parseYOLOOutput(outputArray)
+        return parseYOLOOutput(outputArray, bitmap.width.toFloat(), bitmap.height.toFloat(), scale, padX, padY)
     }
 
-    private fun parseYOLOOutput(outputArray: Array<Array<FloatArray>>): List<Detection> {
+    private fun parseYOLOOutput(
+        outputArray: Array<Array<FloatArray>>, 
+        origWidth: Float, 
+        origHeight: Float, 
+        scale: Float, 
+        padX: Float, 
+        padY: Float
+    ): List<Detection> {
         val candidateDetections = mutableListOf<Detection>()
 
-        // Ajusta estas etiquetas según cómo etiquetaste tu dataset de fresas
+        // Etiquetas extraídas del archivo metadata.yaml
         val numClasses = 3
-        val labels = listOf("Verde", "Madura", "Pasada")
+        val labels = listOf("Madura", "Semimadura", "Inmadura")
 
         for (i in 0 until 8400) {
             var maxClassScore = 0f
             var classId = -1
 
-            // Iterar sobre las 3 clases para encontrar la de mayor probabilidad en este anchor
             for (c in 0 until numClasses) {
                 val score = outputArray[0][4 + c][i]
                 if (score > maxClassScore) {
@@ -107,17 +125,34 @@ class TFLiteDetector(private val context: Context) {
             }
 
             if (maxClassScore > confidenceThreshold) {
-                // Sintaxis correcta para extraer de un arreglo 3D
-                val cx = outputArray[0][0][i]
-                val cy = outputArray[0][1][i]
-                val w = outputArray[0][2][i]
-                val h = outputArray[0][3][i]
+                var cx = outputArray[0][0][i]
+                var cy = outputArray[0][1][i]
+                var w = outputArray[0][2][i]
+                var h = outputArray[0][3][i]
 
-                // Convertir centro [cx, cy, w, h] a esquinas [xMin, yMin, xMax, yMax]
-                val xMin = (cx - w / 2f) / modelInputSize
-                val yMin = (cy - h / 2f) / modelInputSize
-                val xMax = (cx + w / 2f) / modelInputSize
-                val yMax = (cy + h / 2f) / modelInputSize
+                // Si el modelo saca normalizado (0-1), lo escalamos a 640x640
+                if (cx <= 1.0f && cy <= 1.0f && w <= 1.0f && h <= 1.0f) {
+                    cx *= modelInputSize
+                    cy *= modelInputSize
+                    w *= modelInputSize
+                    h *= modelInputSize
+                }
+
+                // Remove padding
+                val absCx = cx - padX
+                val absCy = cy - padY
+                
+                // Unscale to original image dimensions
+                val origCx = absCx / scale
+                val origCy = absCy / scale
+                val origW = w / scale
+                val origH = h / scale
+
+                // Convert to [0,1] normalized coordinates relative to the ORIGINAL image
+                val xMin = (origCx - origW / 2f) / origWidth
+                val yMin = (origCy - origH / 2f) / origHeight
+                val xMax = (origCx + origW / 2f) / origWidth
+                val yMax = (origCy + origH / 2f) / origHeight
 
                 val labelName = if (classId in labels.indices) labels[classId] else "Desconocido"
 

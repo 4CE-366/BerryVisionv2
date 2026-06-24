@@ -5,7 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.example.berryvision.data.CloudApiService
 import com.example.berryvision.ml.TFLiteDetector
 import com.example.berryvision.ui.camera.DetectionViewModel
@@ -30,19 +32,30 @@ class MainActivity : ComponentActivity() {
         
         // Setup Retrofit with a placeholder URL
         val retrofit = Retrofit.Builder()
-            .baseUrl("https://api.berryvision.example.com/") // Placeholder
+            .baseUrl("http://10.0.2.2:8000/") // Connected to local FastAPI instance
             .addConverterFactory(GsonConverterFactory.create())
             .build()
         val cloudApiService = retrofit.create(CloudApiService::class.java)
 
         setContent {
             BerryvisionTheme {
-                MainScreen(
-                    detector = tfliteDetector,
-                    cloudApiService = cloudApiService,
-                    connectivityObserver = connectivityObserver,
-                    viewModel = detectionViewModel
-                )
+                var currentScreen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("home") }
+
+                if (currentScreen == "home") {
+                    com.example.berryvision.ui.home.HomeScreen(
+                        onAnalyzeClick = { currentScreen = "camera_realtime" },
+                        onGalleryClick = { currentScreen = "camera_photo" }
+                    )
+                } else {
+                    MainScreen(
+                        detector = tfliteDetector,
+                        cloudApiService = cloudApiService,
+                        connectivityObserver = connectivityObserver,
+                        viewModel = detectionViewModel,
+                        initialMode = if (currentScreen == "camera_realtime") com.example.berryvision.ui.camera.AppMode.RealTime else com.example.berryvision.ui.camera.AppMode.Photo,
+                        onBack = { currentScreen = "home" }
+                    )
+                }
             }
         }
     }

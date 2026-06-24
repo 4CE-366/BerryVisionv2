@@ -35,12 +35,21 @@ fun DetectionOverlay(
         val height = size.height
 
         detections.forEach { detection ->
-            // Detection boxes are usually normalized [0, 1]
             // Format: [x_min, y_min, x_max, y_max]
-            val left = detection.box[0] * width
-            val top = detection.box[1] * height
-            val right = detection.box[2] * width
-            val bottom = detection.box[3] * height
+            val isAbsolute = detection.box.any { it > 1.0f }
+            // In live camera, absolute coords would be relative to camera resolution, which is tricky to map without knowing it.
+            // But TFLite now guarantees normalized [0,1]. We just handle the case if API is somehow used here.
+            val box = if (isAbsolute) {
+                // Approximate normalization assuming they might be scaled to some standard like 640
+                listOf(detection.box[0]/640f, detection.box[1]/640f, detection.box[2]/640f, detection.box[3]/640f)
+            } else {
+                detection.box
+            }
+
+            val left = box[0] * width
+            val top = box[1] * height
+            val right = box[2] * width
+            val bottom = box[3] * height
 
             drawRect(
                 color = boxColor,
