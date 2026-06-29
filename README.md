@@ -6,7 +6,7 @@
 **Estados detectados:**
 *   **Verde:** Fresa en crecimiento, no apta para cosecha.
 *   **Madura:** Fresa en su punto óptimo de consumo/venta.
-*   **Pasada:** Fresa sobremadurada o en proceso de descomposición.
+*   **Semi madura:** Fresa en proceso de maduración.
 
 ---
 
