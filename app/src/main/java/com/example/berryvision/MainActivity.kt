@@ -12,6 +12,7 @@ import com.example.berryvision.data.CloudApiService
 import com.example.berryvision.ml.TFLiteDetector
 import com.example.berryvision.ui.camera.DetectionViewModel
 import com.example.berryvision.ui.camera.MainScreen
+import com.example.berryvision.ui.home.HomeScreen
 import com.example.berryvision.ui.theme.BerryvisionTheme
 import com.example.berryvision.util.NetworkConnectivityObserver
 import retrofit2.Retrofit
@@ -42,7 +43,7 @@ class MainActivity : ComponentActivity() {
                 var currentScreen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("home") }
 
                 if (currentScreen == "home") {
-                    com.example.berryvision.ui.home.HomeScreen(
+                    HomeScreen(
                         onAnalyzeClick = { currentScreen = "camera_realtime" },
                         onGalleryClick = { currentScreen = "camera_photo" }
                     )
