@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -21,7 +22,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun HomeScreen(
     onAnalyzeClick: () -> Unit,
-    onGalleryClick: () -> Unit
+    onGalleryClick: () -> Unit,
+    onStatsClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -94,6 +96,24 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     "Ver Galería",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onStatsClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.DateRange, contentDescription = null)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "Ver Conteo Diario",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )

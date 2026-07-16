@@ -22,15 +22,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.berryvision.data.Detection
+import com.example.berryvision.util.saveBitmapToInternalStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisResultScreen(
     bitmap: Bitmap,
     detections: List<Detection>,
-    onNewCapture: () -> Unit
+    onNewCapture: () -> Unit,
+    onSaveCount: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
@@ -115,7 +119,13 @@ fun AnalysisResultScreen(
                     onDismissRequest = { showBottomSheet = false },
                     sheetState = sheetState
                 ) {
-                    AnalysisSummary(detections)
+                    AnalysisSummary(
+                        detections = detections,
+                        onSaveCount = { count ->
+                            saveBitmapToInternalStorage(context, bitmap, count)
+                            onSaveCount(count)
+                        }
+                    )
                 }
             }
         }
@@ -123,11 +133,15 @@ fun AnalysisResultScreen(
 }
 
 @Composable
-fun AnalysisSummary(detections: List<Detection>) {
+fun AnalysisSummary(
+    detections: List<Detection>,
+    onSaveCount: (Int) -> Unit
+) {
     val total = detections.size
     val avgConfidence = if (detections.isNotEmpty()) {
         detections.map { it.confidence }.average()
     } else 0.0
+    var isSaved by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -163,6 +177,19 @@ fun AnalysisSummary(detections: List<Detection>) {
                 Text(label, fontWeight = FontWeight.Medium)
                 Text(count.toString(), fontWeight = FontWeight.Bold)
             }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Button(
+            onClick = {
+                onSaveCount(total)
+                isSaved = true
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isSaved && total > 0
+        ) {
+            Text(if (isSaved) "Conteo Guardado" else "Guardar en Conteo Diario")
         }
     }
 }

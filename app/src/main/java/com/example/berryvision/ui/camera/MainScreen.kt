@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.berryvision.data.CloudApiService
 import com.example.berryvision.ml.TFLiteDetector
+import com.example.berryvision.ui.stats.DailyCountViewModel
 import com.example.berryvision.util.ConnectivityObserver
 import com.example.berryvision.util.scaleDown
 import com.example.berryvision.util.toOrientedBitmap
@@ -52,6 +53,7 @@ fun MainScreen(
     cloudApiService: CloudApiService,
     connectivityObserver: ConnectivityObserver,
     viewModel: DetectionViewModel,
+    dailyCountViewModel: DailyCountViewModel,
     initialMode: AppMode = AppMode.RealTime,
     onBack: () -> Unit = {}
 ) {
@@ -170,6 +172,9 @@ fun MainScreen(
                         onNewCapture = {
                             viewModel.updateCapturedBitmap(null)
                             viewModel.updateDetections(emptyList())
+                        },
+                        onSaveCount = { count ->
+                            dailyCountViewModel.addStrawberryCount(count)
                         }
                     )
                 } else {
